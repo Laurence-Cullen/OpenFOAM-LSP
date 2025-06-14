@@ -9,11 +9,16 @@ use nom::multi::many0;
 use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
-
+    
 fn main() {
-    println!("Hello, world!");
+    let path = "cavity/0/U";
+    let input = std::fs::read_to_string(path).expect("Failed to read file");
+    let (remaining, tokens) = scan_line(
+        &input,
+    ).unwrap();
+    println!("Remaining: {}", remaining);
+    println!("Tokens: {:?}", tokens);
 }
-
 
 type Line = Vec<Token>;
 
@@ -76,6 +81,7 @@ pub enum Token {
     Type,
     Value,
 
+    BlockComment(String),
     LineComment(String),
     Eof,
 }
@@ -106,9 +112,9 @@ pub fn scan_lines(input: &str) -> Result<Vec<Line>, nom::Err<nom::error::Error<&
 /// Use nom to parse lines of lox code and return a vector of tokens.
 pub fn scan_line(input: &str) -> IResult<&str, Vec<Token>> {
     many0(alt(ws_separated!((
+        block_comment,
         line_comment,
         keyword,
-        // float,
         int,
         keyword,
         single_char_token
@@ -157,6 +163,10 @@ fn single_char_token(input: &str) -> IResult<&str, Token> {
     Ok((remaining, token_type))
 }
 
+fn block_comment(input: &str) -> IResult<&str, Token> {
+    let (remaining, comment) = delimited(tag("/*"), is_not("*/"), tag("*/")).parse(input)?;
+    Ok((remaining, Token::BlockComment(comment.to_string())))
+}
 
 fn float(input: &str) -> IResult<&str, Token> {
     let (remaining, number) = double.parse(input)?;
@@ -176,7 +186,7 @@ fn get_foam_definition(input: Token) -> String {
         Token::ConvertToMeters => "Specifies the scaling factor to convert the mesh units to meters.",
         Token::Blocks => "Defines the list of mesh blocks in blockMesh.",
         Token::Vertices => "Lists the vertex coordinates used to construct mesh blocks.",
-        Token::Hex => "Specifies a hexahedral block using a list of 8 vertex indices.",
+        Token::Hex => "Specifies a hexahedral block using a list of vertex indices.",
         Token::SimpleGrading => "Describes the cell expansion ratios for mesh grading inside a block.",
         Token::Boundary => "Defines the boundaries and patches of the mesh with their types and faces.",
         Token::Application => "Specifies the name of the solver or application to be executed.",
