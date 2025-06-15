@@ -9,8 +9,8 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tower_lsp::{async_trait, lsp_types::*};
 
 mod analyzer;
-mod parser_utils;
 mod parser;
+mod parser_utils;
 
 // an expression node in the AST
 #[derive(Debug)]
@@ -57,7 +57,7 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, _params: InitializedParams) {
+    async fn initialized(&self, params: InitializedParams) {
         self.client.log_message(MessageType::INFO, "...").await;
     }
 
@@ -68,24 +68,67 @@ impl LanguageServer for Backend {
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let pos = params.text_document_position_params;
         let file = pos.text_document.uri.path();
+        self.client.log_message(MessageType::INFO, file).await;
 
-        if let Some((detail, location)) = analyzer::Analyzer::hover(
-            PathBuf::from(file),
-            pos.position.line as usize,
-            pos.position.character as usize,
-        )
-        .await
-        {
-            Ok(Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
-                    language: "".to_string(),
-                    value: detail,
-                })),
-                range: Some(location.range),
-            }))
-        } else {
-            Ok(None)
+
+        let buffer =  std::fs::read_to_string(&PathBuf::from(file)).ok().unwrap();
+
+        let (_, (tokens, spans)) = parser::scan(&buffer).unwrap();
+
+        let chars_per_line = parser::count_characters_per_line(&buffer);
+        let index = parser::index_from_line_and_col(chars_per_line.clone(), pos.position.line as usize, pos.position.character as usize);
+
+        let mut span_index = 0;
+        // let mut width = 0;
+        // let mut start_col = 0;
+
+        // iterate through spans until index sits between start and end
+        for (i, span) in spans.iter().enumerate() {
+            if span.start <= index && index < span.end {
+                span_index = i;
+                // width = span.end - span.start;
+                // start_col = parser::col_from_index(chars_per_line.clone(), span.start);
+                break;
+            }
         }
+
+        let hover_text = parser::get_foam_definition(tokens[span_index]);
+
+        self.client.log_message(MessageType::INFO, pos.position.line).await;
+        self.client.log_message(MessageType::INFO, hover_text.clone()).await;
+
+        Ok(Some(Hover {
+            contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
+                language: "".to_string(),
+                value: hover_text.to_string(),
+            })),
+            range: None
+        }))
+
+        // if let Some((detail, location)) = analyzer::Analyzer::hover(
+        //     PathBuf::from(file),
+        //     pos.position.line as usize,
+        //     pos.position.character as usize,
+        // )
+        // .await {
+        //     self.client
+        //         .log_message(MessageType::INFO, &format!("Hover detail: {}", detail))
+        //         .await;
+        //     Ok(None)
+        // };
+
+
+        // {
+        //     Ok(Some(Hover {
+        //         contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
+        //             language: "".to_string(),
+        //             value: detail,
+        //         })),
+        //         range: Some(location.range),
+        //     }))
+        // } else {
+        //     Ok(None)
+        // }
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
