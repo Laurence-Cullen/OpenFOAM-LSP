@@ -9,13 +9,17 @@ use nom::multi::many0;
 use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
-    
+
+struct Span {
+    start: usize,
+    end: usize,
+    line: usize,
+}
+
 fn main() {
-    let path = "cavity/0/U";
+    let path = "../cavity/0/U";
     let input = std::fs::read_to_string(path).expect("Failed to read file");
-    let (remaining, tokens) = scan_line(
-        &input,
-    ).unwrap();
+    let (remaining, tokens) = scan_line(&input).unwrap();
     println!("Remaining: {}", remaining);
     println!("Tokens: {:?}", tokens);
 }
@@ -43,7 +47,6 @@ pub enum Token {
     BoundaryName(String),
     Int(i64),
     Float(f64),
-
 
     // OpenFOAM keywords
     FoamFile,
@@ -75,8 +78,8 @@ pub enum Token {
     InterpolationSchemes,
     SnGradSchemes,
     Solvers,
-    Dimensions, 
-    InternalField, 
+    Dimensions,
+    InternalField,
     BoundaryField,
     Type,
     Value,
@@ -182,36 +185,66 @@ fn int(input: &str) -> IResult<&str, Token> {
 
 fn get_foam_definition(input: Token) -> String {
     let definition = match input {
-        Token::FoamFile => "Specifies file metadata including version, format, and class of the OpenFOAM dictionary.",
-        Token::ConvertToMeters => "Specifies the scaling factor to convert the mesh units to meters.",
+        Token::FoamFile => {
+            "Specifies file metadata including version, format, and class of the OpenFOAM dictionary."
+        }
+        Token::ConvertToMeters => {
+            "Specifies the scaling factor to convert the mesh units to meters."
+        }
         Token::Blocks => "Defines the list of mesh blocks in blockMesh.",
         Token::Vertices => "Lists the vertex coordinates used to construct mesh blocks.",
         Token::Hex => "Specifies a hexahedral block using a list of vertex indices.",
-        Token::SimpleGrading => "Describes the cell expansion ratios for mesh grading inside a block.",
-        Token::Boundary => "Defines the boundaries and patches of the mesh with their types and faces.",
+        Token::SimpleGrading => {
+            "Describes the cell expansion ratios for mesh grading inside a block."
+        }
+        Token::Boundary => {
+            "Defines the boundaries and patches of the mesh with their types and faces."
+        }
         Token::Application => "Specifies the name of the solver or application to be executed.",
-        Token::StartFrom => "Indicates how to determine the starting time of the simulation (e.g., 'startTime' or 'latestTime').",
+        Token::StartFrom => {
+            "Indicates how to determine the starting time of the simulation (e.g., 'startTime' or 'latestTime')."
+        }
         Token::StartTime => "Specifies the time value to start the simulation from.",
-        Token::StopAt => "Determines when the simulation should stop (e.g., 'endTime' or 'writeNow').",
+        Token::StopAt => {
+            "Determines when the simulation should stop (e.g., 'endTime' or 'writeNow')."
+        }
         Token::EndTime => "Specifies the end time value of the simulation.",
         Token::DeltaT => "Defines the time step size used for time integration.",
-        Token::WriteControl => "Determines the control strategy for writing output (e.g., 'timeStep', 'runTime').",
+        Token::WriteControl => {
+            "Determines the control strategy for writing output (e.g., 'timeStep', 'runTime')."
+        }
         Token::WriteInterval => "Specifies the interval at which results are written to disk.",
         Token::PurgeWrite => "Limits the number of time directories stored by deleting old ones.",
-        Token::WriteFormat => "Specifies the format (e.g., ascii, binary) in which data is written.",
+        Token::WriteFormat => {
+            "Specifies the format (e.g., ascii, binary) in which data is written."
+        }
         Token::WritePrecision => "Sets the numerical precision of written output.",
-        Token::WriteCompression => "Controls whether the output files are compressed (e.g., 'on' or 'off').",
-        Token::TimeFormat => "Specifies the format used to write time directories (e.g., 'general' or 'fixed').",
+        Token::WriteCompression => {
+            "Controls whether the output files are compressed (e.g., 'on' or 'off')."
+        }
+        Token::TimeFormat => {
+            "Specifies the format used to write time directories (e.g., 'general' or 'fixed')."
+        }
         Token::TimePrecision => "Sets the precision of time values used in directory names.",
-        Token::RunTimeModifiable => "Determines if dictionaries can be modified during a running simulation.",
+        Token::RunTimeModifiable => {
+            "Determines if dictionaries can be modified during a running simulation."
+        }
         Token::DdtSchemes => "Defines the schemes for time derivative discretization.",
         Token::GradSchemes => "Specifies the gradient calculation schemes.",
         Token::DivSchemes => "Defines the discretization schemes for divergence terms.",
         Token::LaplacianSchemes => "Specifies the schemes for discretizing Laplacian terms.",
-        Token::InterpolationSchemes => "Defines the interpolation schemes for field values at cell faces.",
-        Token::SnGradSchemes => "Specifies the schemes used for surface-normal gradient calculations.",
-        Token::Solvers => "Defines the linear solvers and their parameters for solving different fields.",
-        Token::Dimensions => "Specifies the physical dimensions of a field in SI units using a 7-tuple.",
+        Token::InterpolationSchemes => {
+            "Defines the interpolation schemes for field values at cell faces."
+        }
+        Token::SnGradSchemes => {
+            "Specifies the schemes used for surface-normal gradient calculations."
+        }
+        Token::Solvers => {
+            "Defines the linear solvers and their parameters for solving different fields."
+        }
+        Token::Dimensions => {
+            "Specifies the physical dimensions of a field in SI units using a 7-tuple."
+        }
         Token::InternalField => "Defines the initial value of the field inside the domain.",
         Token::BoundaryField => "Specifies boundary conditions for a field on each patch.",
         Token::Type => "Specifies the type of a dictionary entry or boundary condition.",
@@ -254,8 +287,8 @@ fn keyword(input: &str) -> IResult<&str, Token> {
         "interpolationSchemes" => Token::InterpolationSchemes,
         "snGradSchemes" => Token::SnGradSchemes,
         "solvers" => Token::Solvers,
-        "dimensions" => Token::Dimensions, 
-        "internalField" => Token::InternalField, 
+        "dimensions" => Token::Dimensions,
+        "internalField" => Token::InternalField,
         "boundaryField" => Token::BoundaryField,
         "type" => Token::Type,
         "value" => Token::Value,
@@ -284,21 +317,19 @@ mod tests {
     // }
 
     #[test]
-    fn test_foam_keywords(){
+    fn test_foam_keywords() {
         let input = "hex (0 1 2 3 4 5 6 7) (40 40 1) simpleGrading (1 1 1)";
         let (remaining, token) = keyword(input).unwrap();
         assert_eq!(token, Token::Hex);
     }
 
-
     #[test]
-    fn test_foam_line(){
+    fn test_foam_line() {
         let input = "hex simpleGrading";
         let (remaining, tokens) = scan_line(input).unwrap();
         let expected_tokens = vec![Token::Hex, Token::SimpleGrading];
         assert_eq!(tokens, expected_tokens);
     }
-
 
     #[test]
     fn test_invalid_keyword() {
@@ -306,7 +337,6 @@ mod tests {
         let result = keyword(input);
         assert!(result.is_err());
     }
-
 
     #[test]
     fn test_comment() {
