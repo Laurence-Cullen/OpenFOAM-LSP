@@ -40,6 +40,41 @@ struct Backend {
     ast_map: HashMap<String, Ast>,
 }
 
+impl Backend {
+    
+    async fn on_change(&self, params: TextDocumentItem) {
+        let text = params.text;
+
+        let (_, (tokens, spans)) = parser::scan(&text).unwrap();
+
+        let errors = parser::get_errors(&tokens, &spans);
+
+        // let diagnostics =  errors
+        //     .into_iter()
+        //     .map(|error| {
+        //         Diagnostic {
+        //             range: Range {
+        //                 start: Position {
+        //                     line: error.line as u32,
+        //                     character: error.col as u32,
+        //                 },
+        //                 end: Position {
+        //                     line: error.line as u32,
+        //                     character: error.col as u32 + 1,
+        //                 },
+        //             },
+        //             severity: Some(DiagnosticSeverity::ERROR),
+        //             code: None,
+        //             source: Some("Foam Language Server".to_string()),
+        //             message: error.message,
+        //             ..Diagnostic::default()
+        //         }
+        //     })
+        //     .collect::<Vec<_>>();
+
+    }
+}
+
 #[async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -79,15 +114,11 @@ impl LanguageServer for Backend {
         let index = parser::index_from_line_and_col(chars_per_line.clone(), pos.position.line as usize, pos.position.character as usize);
 
         let mut span_index = 0;
-        // let mut width = 0;
-        // let mut start_col = 0;
 
         // iterate through spans until index sits between start and end
         for (i, span) in spans.iter().enumerate() {
             if span.start <= index && index < span.end {
                 span_index = i;
-                // width = span.end - span.start;
-                // start_col = parser::col_from_index(chars_per_line.clone(), span.start);
                 break;
             }
         }
@@ -104,31 +135,6 @@ impl LanguageServer for Backend {
             })),
             range: None
         }))
-
-        // if let Some((detail, location)) = analyzer::Analyzer::hover(
-        //     PathBuf::from(file),
-        //     pos.position.line as usize,
-        //     pos.position.character as usize,
-        // )
-        // .await {
-        //     self.client
-        //         .log_message(MessageType::INFO, &format!("Hover detail: {}", detail))
-        //         .await;
-        //     Ok(None)
-        // };
-
-
-        // {
-        //     Ok(Some(Hover {
-        //         contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
-        //             language: "".to_string(),
-        //             value: detail,
-        //         })),
-        //         range: Some(location.range),
-        //     }))
-        // } else {
-        //     Ok(None)
-        // }
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
