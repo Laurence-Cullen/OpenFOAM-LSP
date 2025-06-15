@@ -1,6 +1,5 @@
 mod parser_utils;
 
-use std::collections::HashMap;
 use std::ffi::c_uchar;
 
 use nom::branch::alt;
@@ -13,8 +12,8 @@ use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
 
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct Span {
+#[derive(Debug)]
+struct Span {
     start: usize,
     end: usize,
 }
@@ -116,24 +115,6 @@ pub fn count_characters_per_line(input: &str) -> Vec<usize> {
         .collect()
 }
 
-// pub fn get_line_and_col(chars_per_line: Vec<usize>, index: usize) -> (usize, usize) {
-//     let mut line = 1;
-//     let mut col = 1;
-
-//     let mut temp_index = index;
-
-//     for (i, &num_chars) in chars_per_line.iter().enumerate() {
-//         if temp_index < num_chars {
-//             col = temp_index + 1;
-//             break;
-//         }
-//         temp_index -= num_chars;
-//         line += 1;
-//     }
-
-//     (line, col)
-// }
-
 pub fn index_from_line_and_col(chars_per_line: Vec<usize>, line: usize, col: usize) -> usize {
     let mut index = 0;
 
@@ -149,11 +130,11 @@ pub fn index_from_line_and_col(chars_per_line: Vec<usize>, line: usize, col: usi
 }
 
 /// Use nom to parse lines of lox code and return a vector of tokens and spans.
-pub fn scan(input: &str) -> IResult<&str, HashMap<Span, Token>> {
+pub fn scan(input: &str) -> IResult<&str, (Vec<Token>, Vec<Span>)> {
+    let mut tokens = Vec::new();
+    let mut spans = Vec::new();
     let mut current_input = input;
     let mut current_index = 0;
-
-    let mut map = HashMap::new();
 
     while !current_input.is_empty() {
         // Skip whitespace and track position
@@ -177,14 +158,12 @@ pub fn scan(input: &str) -> IResult<&str, HashMap<Span, Token>> {
             Ok((remaining, token)) => {
                 let consumed = current_input.len() - remaining.len();
                 let end_index = start_index + consumed;
-                map.insert(
-                    Span {
-                        start: start_index,
-                        end: end_index,
-                    },
-                    token,
-                );
 
+                tokens.push(token);
+                spans.push(Span {
+                    start: start_index,
+                    end: end_index,
+                });
                 current_input = remaining;
                 current_index = end_index;
             }
@@ -192,7 +171,7 @@ pub fn scan(input: &str) -> IResult<&str, HashMap<Span, Token>> {
         }
     }
 
-    Ok((current_input, map))
+    Ok((current_input, (tokens, spans)))
 }
 
 fn line_comment(input: &str) -> IResult<&str, Token> {
@@ -393,16 +372,6 @@ fn keyword(input: &str) -> IResult<&str, Token> {
 mod tests {
     use super::*;
 
-    // #[test]
-    // fn test_keyword() {
-    //     let input = "and";
-    //     let result = keyword(input);
-    //     assert!(result.is_ok());
-    //     let (remaining, token) = result.unwrap();
-    //     assert_eq!(remaining, "");
-    //     assert_eq!(token, Token::And);
-    // }
-
     #[test]
     fn test_foam_keywords() {
         let input = "hex (0 1 2 3 4 5 6 7) (40 40 1) simpleGrading (1 1 1)";
@@ -435,33 +404,4 @@ mod tests {
 
         println!("{:?}", tokens);
     }
-
-    // #[test]
-    // fn test_scan_line_2() {
-    //     let input = "var and2 = 10;";
-    //     let (remaining, tokens) = scan_line(input).unwrap();
-
-    //     let expected_tokens = vec![
-    //         Token::Var,
-    //         Token::Identifier("and2".to_string()),
-    //         Token::Equal,
-    //         Token::Number(10.0),
-    //         Token::Semicolon,
-    //     ];
-    //     assert_eq!(tokens, expected_tokens);
-    // }
-
-    // #[test]
-    // fn test_scan_line_3() {
-    //     let input = "andfunc for;  // This is a comment";
-    //     let (remaining, tokens) = scan_line(input).unwrap();
-
-    //     let expected_tokens = vec![
-    //         Token::Identifier("andfunc".to_string()),
-    //         Token::For,
-    //         Token::Semicolon,
-    //         Token::LineComment(" This is a comment".to_string()),
-    //     ];
-    //     assert_eq!(tokens, expected_tokens);
-    // }
 }
