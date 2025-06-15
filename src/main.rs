@@ -1,14 +1,10 @@
 mod parser_utils;
 
 use std::collections::HashMap;
-use std::ffi::c_uchar;
 
 use nom::branch::alt;
-use nom::bytes::complete::{is_not, tag};
-use nom::character::complete::{
-    alpha1, alphanumeric0, alphanumeric1, line_ending, not_line_ending,
-};
-use nom::multi::many0;
+use nom::bytes::complete::tag;
+use nom::character::complete::alphanumeric1;
 use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
@@ -31,7 +27,6 @@ fn main() {
     println!("Tokens: {:?}", tokens);
 }
 
-type Line = Vec<Token>;
 #[derive(Debug, PartialEq)]
 pub enum Token {
     // Single character tokens
