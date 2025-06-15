@@ -1,5 +1,6 @@
 mod parser_utils;
 
+use std::collections::HashMap;
 use std::ffi::c_uchar;
 
 use nom::branch::alt;
@@ -12,7 +13,7 @@ use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 struct Span {
     start: usize,
     end: usize,
@@ -366,6 +367,68 @@ fn keyword(input: &str) -> IResult<&str, Token> {
         }
     };
     Ok((remaining, token_type))
+}
+
+pub fn get_inline_hints(tokens: &[Token], spans: &[Span]) -> HashMap<Span, String> {
+    let mut hints = HashMap::new();
+
+    for (i, token) in tokens.iter().enumerate() {
+        if token == &Token::Dimensions {
+            //the next nine tokens should be:
+            // LeeftBracket, Int, Int, Int, Int, Int, Int, Int, RightBracket
+            // If they match this add the following hints for the Int token spans:
+            // kg, meters, seconds, kelvin, moles, amps, candela
+
+            if i + 8 < tokens.len() {
+                let unit_labels = vec!["kg", "m", "s", "K", "mol", "A", "cd"];
+                let mut all_match = true;
+
+                // Check LeftBracket
+                if tokens[i + 1] != Token::LeftBracket {
+                    all_match = false;
+                }
+
+                // Check the 7 Int tokens and RightBracket
+                for j in 0..7 {
+                    if !matches!(tokens[i + 2 + j], Token::Int(_)) {
+                        all_match = false;
+                        break;
+                    }
+                }
+
+                // Check RightBracket
+                if tokens[i + 9] != Token::RightBracket {
+                    all_match = false;
+                }
+
+                // If all tokens match the expected pattern, add hints for the Int tokens
+                if all_match {
+                    for j in 0..7 {
+                        let token_index = i + 2 + j;
+                        hints.insert(spans[token_index].clone(), unit_labels[j].to_string());
+                    }
+                }
+            }
+        };
+    }
+    hints
+}
+
+pub fn token_color(token: Token) -> String {
+    match token {
+        Token::Hex => "#FF0000".to_string(),
+        Token::VolVectorField => "#00FF00".to_string(),
+        Token::Object => "#0000FF".to_string(),
+        Token::U => "#FFFF00".to_string(),
+        Token::Uniform => "#FF00FF".to_string(),
+        Token::MovingWall => "#00FFFF".to_string(),
+        Token::FixedValue => "#800080".to_string(),
+        Token::FrontAndBack => "#808080".to_string(),
+        Token::NoSlip => "#FFA500".to_string(),
+        Token::Empty => "#800000".to_string(),
+        Token::FixedWalls => "#008000".to_string(),
+        _ => "#FFFFFF".to_string(),
+    }
 }
 
 #[cfg(test)]
