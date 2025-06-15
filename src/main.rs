@@ -1,5 +1,7 @@
 mod parser_utils;
 
+use std::ffi::c_uchar;
+
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, tag};
 use nom::character::complete::{
@@ -16,8 +18,12 @@ struct Span {
     line: usize,
 }
 
+// fn get_token_at_position(line: usize, col: usize) -> Option<Token> {
+//     // Implementation goes here
+// }
+
 fn main() {
-    let path = "../cavity/0/U";
+    let path = "cavity/0/U";
     let input = std::fs::read_to_string(path).expect("Failed to read file");
     let (remaining, tokens) = scan_line(&input).unwrap();
     println!("Remaining: {}", remaining);
@@ -25,7 +31,6 @@ fn main() {
 }
 
 type Line = Vec<Token>;
-
 #[derive(Debug, PartialEq)]
 pub enum Token {
     // Single character tokens
@@ -83,6 +88,19 @@ pub enum Token {
     BoundaryField,
     Type,
     Value,
+    Format,
+    Ascii,
+    Class,
+    VolVectorField,
+    Object,
+    U,
+    Uniform,
+    MovingWall,
+    FixedWalls,
+    FrontAndBack,
+    FixedValue,
+    NoSlip,
+    Empty,
 
     BlockComment(String),
     LineComment(String),
@@ -127,7 +145,7 @@ pub fn scan_line(input: &str) -> IResult<&str, Vec<Token>> {
 
 fn line_comment(input: &str) -> IResult<&str, Token> {
     let (remaining, comment) =
-        delimited(tag("//"), not_line_ending, many0(line_ending)).parse(input)?;
+        delimited(tag("//"), nom::bytes::complete::take_until("//"), tag("//")).parse(input)?;
     Ok((remaining, Token::LineComment(comment.to_string())))
 }
 
@@ -137,6 +155,8 @@ fn single_char_token(input: &str) -> IResult<&str, Token> {
         tag(")"),
         tag("{"),
         tag("}"),
+        tag("["),
+        tag("]"),
         tag(","),
         tag("."),
         tag("-"),
@@ -153,6 +173,8 @@ fn single_char_token(input: &str) -> IResult<&str, Token> {
         ")" => Token::RightParen,
         "{" => Token::LeftBrace,
         "}" => Token::RightBrace,
+        "[" => Token::LeftBracket,
+        "]" => Token::RightBracket,
         "," => Token::Comma,
         "." => Token::Dot,
         "-" => Token::Minus,
@@ -165,9 +187,9 @@ fn single_char_token(input: &str) -> IResult<&str, Token> {
 
     Ok((remaining, token_type))
 }
-
 fn block_comment(input: &str) -> IResult<&str, Token> {
-    let (remaining, comment) = delimited(tag("/*"), is_not("*/"), tag("*/")).parse(input)?;
+    let (remaining, comment) =
+        delimited(tag("/*"), nom::bytes::complete::take_until("*/"), tag("*/")).parse(input)?;
     Ok((remaining, Token::BlockComment(comment.to_string())))
 }
 
@@ -292,6 +314,19 @@ fn keyword(input: &str) -> IResult<&str, Token> {
         "boundaryField" => Token::BoundaryField,
         "type" => Token::Type,
         "value" => Token::Value,
+        "format" => Token::Format,
+        "ascii" => Token::Ascii,
+        "class" => Token::Class,
+        "volVectorField" => Token::VolVectorField,
+        "object" => Token::Object,
+        "U" => Token::U,
+        "uniform" => Token::Uniform,
+        "movingWall" => Token::MovingWall,
+        "fixedValue" => Token::FixedValue,
+        "frontAndBack" => Token::FrontAndBack,
+        "noSlip" => Token::NoSlip,
+        "empty" => Token::Empty,
+        "fixedWalls" => Token::FixedWalls,
         _ => {
             return Err(nom::Err::Error(nom::error::Error::new(
                 input,
