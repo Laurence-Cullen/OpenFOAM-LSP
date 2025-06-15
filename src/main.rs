@@ -1,5 +1,6 @@
 mod parser_utils;
 
+use std::collections::HashMap;
 use std::ffi::c_uchar;
 
 use nom::branch::alt;
@@ -12,10 +13,10 @@ use nom::number::complete::double;
 use nom::sequence::delimited;
 use nom::{IResult, Parser};
 
-struct Span {
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub struct Span {
     start: usize,
     end: usize,
-    line: usize,
 }
 
 // fn get_token_at_position(line: usize, col: usize) -> Option<Token> {
@@ -25,7 +26,7 @@ struct Span {
 fn main() {
     let path = "cavity/0/U";
     let input = std::fs::read_to_string(path).expect("Failed to read file");
-    let (remaining, tokens) = scan_line(&input).unwrap();
+    let (remaining, tokens) = scan(&input).unwrap();
     println!("Remaining: {}", remaining);
     println!("Tokens: {:?}", tokens);
 }
@@ -107,40 +108,91 @@ pub enum Token {
     Eof,
 }
 
-pub fn scan_lines(input: &str) -> Result<Vec<Line>, nom::Err<nom::error::Error<&str>>> {
-    let mut lines: Vec<Line> = Vec::new();
-    for line in input.lines() {
-        let result = scan_line(line);
-
-        // If result is not OK return error
-        if result.is_err() {
-            return Err(result.err().unwrap());
-        }
-
-        let (remaining, tokens) = result?;
-
-        if !remaining.is_empty() {
-            return Err(nom::Err::Error(nom::error::Error::new(
-                remaining,
-                nom::error::ErrorKind::NonEmpty,
-            )));
-        }
-        lines.push(tokens);
-    }
-    Ok(lines)
+/// Count how many characters there are per line, inluding new lines
+pub fn count_characters_per_line(input: &str) -> Vec<usize> {
+    input
+        .lines()
+        .map(|line| line.len() + 1) // +1 for the newline character
+        .collect()
 }
 
-/// Use nom to parse lines of lox code and return a vector of tokens.
-pub fn scan_line(input: &str) -> IResult<&str, Vec<Token>> {
-    many0(alt(ws_separated!((
-        block_comment,
-        line_comment,
-        keyword,
-        int,
-        keyword,
-        single_char_token
-    ))))
-    .parse(input)
+// pub fn get_line_and_col(chars_per_line: Vec<usize>, index: usize) -> (usize, usize) {
+//     let mut line = 1;
+//     let mut col = 1;
+
+//     let mut temp_index = index;
+
+//     for (i, &num_chars) in chars_per_line.iter().enumerate() {
+//         if temp_index < num_chars {
+//             col = temp_index + 1;
+//             break;
+//         }
+//         temp_index -= num_chars;
+//         line += 1;
+//     }
+
+//     (line, col)
+// }
+
+pub fn index_from_line_and_col(chars_per_line: Vec<usize>, line: usize, col: usize) -> usize {
+    let mut index = 0;
+
+    // Do cumulative sum of characters per line up to the given line
+    for &num_chars in chars_per_line.iter().take(line) {
+        index += num_chars;
+    }
+
+    // Add the column index to the cumulative sum
+    index += col;
+
+    index
+}
+
+/// Use nom to parse lines of lox code and return a vector of tokens and spans.
+pub fn scan(input: &str) -> IResult<&str, HashMap<Span, Token>> {
+    let mut current_input = input;
+    let mut current_index = 0;
+
+    let mut map = HashMap::new();
+
+    while !current_input.is_empty() {
+        // Skip whitespace and track position
+        let whitespace_parser = nom::character::complete::multispace0;
+        let (after_ws, _) = whitespace_parser(current_input)?;
+        current_index += current_input.len() - after_ws.len();
+        current_input = after_ws;
+
+        if current_input.is_empty() {
+            break;
+        }
+
+        let start_index = current_index;
+
+        // Try to parse a token
+        let mut token_parser = alt((block_comment, line_comment, keyword, int, single_char_token));
+
+        let parser_result = token_parser.parse(current_input);
+
+        match parser_result {
+            Ok((remaining, token)) => {
+                let consumed = current_input.len() - remaining.len();
+                let end_index = start_index + consumed;
+                map.insert(
+                    Span {
+                        start: start_index,
+                        end: end_index,
+                    },
+                    token,
+                );
+
+                current_input = remaining;
+                current_index = end_index;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    Ok((current_input, map))
 }
 
 fn line_comment(input: &str) -> IResult<&str, Token> {
@@ -359,14 +411,6 @@ mod tests {
     }
 
     #[test]
-    fn test_foam_line() {
-        let input = "hex simpleGrading";
-        let (remaining, tokens) = scan_line(input).unwrap();
-        let expected_tokens = vec![Token::Hex, Token::SimpleGrading];
-        assert_eq!(tokens, expected_tokens);
-    }
-
-    #[test]
     fn test_invalid_keyword() {
         let input = "invalid";
         let result = keyword(input);
@@ -387,7 +431,7 @@ mod tests {
     #[test]
     fn test_scan_line() {
         let input = "var x <= 10;";
-        let tokens = scan_line(input);
+        let tokens = scan(input);
 
         println!("{:?}", tokens);
     }
